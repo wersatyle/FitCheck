@@ -105,9 +105,12 @@ class InPlaceABN(ABN):
         super(InPlaceABN, self).__init__(num_features, eps, momentum, affine, activation, slope)
 
     def forward(self, x):
-        x, _, _ = inplace_abn(x, self.weight, self.bias, self.running_mean, self.running_var,
-                           self.training, self.momentum, self.eps, self.activation, self.slope)
-        return x
+        try:
+            x, _, _ = inplace_abn(x, self.weight, self.bias, self.running_mean, self.running_var,
+                               self.training, self.momentum, self.eps, self.activation, self.slope)
+            return x
+        except (AttributeError, RuntimeError):
+            return super(InPlaceABN, self).forward(x)
 
 
 class InPlaceABNSync(ABN):
@@ -116,9 +119,12 @@ class InPlaceABNSync(ABN):
     """
 
     def forward(self, x):
-        x, _, _ =  inplace_abn_sync(x, self.weight, self.bias, self.running_mean, self.running_var,
-                                   self.training, self.momentum, self.eps, self.activation, self.slope)
-        return x
+        try:
+            x, _, _ =  inplace_abn_sync(x, self.weight, self.bias, self.running_mean, self.running_var,
+                                       self.training, self.momentum, self.eps, self.activation, self.slope)
+            return x
+        except (AttributeError, RuntimeError):
+            return super(InPlaceABNSync, self).forward(x)
 
     def __repr__(self):
         rep = '{name}({num_features}, eps={eps}, momentum={momentum},' \

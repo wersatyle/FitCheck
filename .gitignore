@@ -3,3 +3,12 @@
 data/
 log/
 pretrain_model/
+venv/
+output/
+output_custom/
+output_girl/
+input_single/
+input_single_png/
+input_girl/
+checkpoints/*.pth
+checkpoints/*.pth.tar

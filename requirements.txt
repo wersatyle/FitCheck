@@ -1,1 +1,8 @@
-opencv-python==4.4.0.46
+# opencv-python==4.4.0.46
+torch
+torchvision
+numpy
+Pillow
+tqdm
+scipy
+opencv-python-headless==4.5.5.64

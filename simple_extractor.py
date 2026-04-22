@@ -1,3 +1,6 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 
@@ -46,6 +49,12 @@ dataset_settings = {
     }
 }
 
+default_checkpoints = {
+    'lip': './checkpoints/exp-schp-201908261155-lip.pth',
+    'atr': './checkpoints/exp-schp-201908301523-atr.pth',
+    'pascal': './checkpoints/exp-schp-201908270938-pascal-person-part.pth',
+}
+
 
 def get_arguments():
     """Parse all the arguments provided from the CLI.
@@ -88,12 +97,25 @@ def get_palette(num_cls):
     return palette
 
 
+def resolve_checkpoint_path(args):
+    if args.model_restore:
+        return args.model_restore
+    return default_checkpoints[args.dataset]
+
+
+def is_html_file(file_path):
+    with open(file_path, 'rb') as f:
+        head = f.read(512).lower()
+    return b'<!doctype html' in head or b'<html' in head
+
+
 def main():
     args = get_arguments()
 
     gpus = [int(i) for i in args.gpu.split(',')]
     assert len(gpus) == 1
-    if not args.gpu == 'None':
+    use_cuda = (args.gpu != 'None') and torch.cuda.is_available()
+    if use_cuda:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
     num_classes = dataset_settings[args.dataset]['num_classes']
@@ -101,16 +123,34 @@ def main():
     label = dataset_settings[args.dataset]['label']
     print("Evaluating total class number {} with {}".format(num_classes, label))
 
+    model_restore = resolve_checkpoint_path(args)
+    if not os.path.isfile(model_restore):
+        raise FileNotFoundError("Checkpoint not found: {}".format(model_restore))
+    if is_html_file(model_restore):
+        raise RuntimeError(
+            "Checkpoint file looks like an HTML download page instead of model weights: {}. "
+            "Re-download the actual .pth file.".format(model_restore)
+        )
+
     model = networks.init_model('resnet101', num_classes=num_classes, pretrained=None)
 
-    state_dict = torch.load(args.model_restore)['state_dict']
+    try:
+        checkpoint = torch.load(model_restore, map_location='cpu')
+    except Exception as e:
+        raise RuntimeError("Failed to load checkpoint '{}': {}".format(model_restore, e))
+
+    if 'state_dict' not in checkpoint:
+        raise KeyError("Invalid checkpoint format: missing 'state_dict' key in {}".format(model_restore))
+
+    state_dict = checkpoint['state_dict']
     from collections import OrderedDict
     new_state_dict = OrderedDict()
     for k, v in state_dict.items():
         name = k[7:]  # remove `module.`
         new_state_dict[name] = v
     model.load_state_dict(new_state_dict)
-    model.cuda()
+    device = torch.device('cuda' if use_cuda else 'cpu')
+    model.to(device)
     model.eval()
 
     transform = transforms.Compose([
@@ -133,7 +173,7 @@ def main():
             w = meta['width'].numpy()[0]
             h = meta['height'].numpy()[0]
 
-            output = model(image.cuda())
+            output = model(image.to(device))
             upsample = torch.nn.Upsample(size=input_size, mode='bilinear', align_corners=True)
             upsample_output = upsample(output[0][-1][0].unsqueeze(0))
             upsample_output = upsample_output.squeeze()
